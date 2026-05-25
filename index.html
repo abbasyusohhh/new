@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>Space Invaders</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0f0f0f;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: Arial, sans-serif;
+      color: white;
+    }
+    h1 { color: #00d4ff; margin-bottom: 10px; }
+    #info { color: #aaa; margin-bottom: 10px; font-size: 18px; }
+    canvas { border: 2px solid #00d4ff; border-radius: 8px; }
+    #msg { margin-top: 15px; color: #aaa; font-size: 16px; }
+  </style>
+</head>
+<body>
+
+  <h1>🚀 Space Invaders</h1>
+  <div id="info">คะแนน: <span id="score">0</span> &nbsp;|&nbsp; ชีวิต: <span id="lives">3</span></div>
+  <canvas id="canvas" width="480" height="500"></canvas>
+  <div id="msg">กด Enter เพื่อเริ่ม | ← → เคลื่อนที่ | Space ยิง</div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const msgEl = document.getElementById('msg');
+
+    let player, bullets, enemies, enemyBullets, score, lives, running, gameLoop, keys;
+
+    function init() {
+      player = { x: 220, y: 450, w: 40, h: 20, speed: 5 };
+      bullets = [];
+      enemyBullets = [];
+      score = 0;
+      lives = 3;
+      keys = {};
+      scoreEl.textContent = 0;
+      livesEl.textContent = 3;
+      spawnEnemies();
+    }
+
+    function spawnEnemies() {
+      enemies = [];
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 10; c++) {
+          enemies.push({
+            x: 30 + c * 42,
+            y: 40 + r * 40,
+            w: 30, h: 20,
+            alive: true
+          });
+        }
+      }
+    }
+
+    let enemyDir = 1;
+    let enemyMoveTimer = 0;
+
+    function update() {
+      // ขยับ player
+      if (keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
+      if (keys['ArrowRight'] && player.x + player.w < 480) player.x += player.speed;
+
+      // ขยับกระสุน player
+      bullets = bullets.filter(b => b.y > 0);
+      bullets.forEach(b => b.y -= 7);
+
+      // ขยับกระสุน enemy
+      enemyBullets = enemyBullets.filter(b => b.y < 500);
+      enemyBullets.forEach(b => b.y += 4);
+
+      // ขยับ enemy
+      enemyMoveTimer++;
+      if (enemyMoveTimer >= 20) {
+        enemyMoveTimer = 0;
+        const alive = enemies.filter(e => e.alive);
+        const maxX = Math.max(...alive.map(e => e.x + e.w));
+        const minX = Math.min(...alive.map(e => e.x));
+        if (maxX >= 480 || minX <= 0) {
+          enemyDir *= -1;
+          alive.forEach(e => e.y += 15);
+        }
+        alive.forEach(e => e.x += enemyDir * 8);
+
+        // enemy ยิงสุ่ม
+        if (alive.length > 0) {
+          const shooter = alive[Math.floor(Math.random() * alive.length)];
+          enemyBullets.push({ x: shooter.x + shooter.w / 2, y: shooter.y + shooter.h });
+        }
+      }
+
+      // ตรวจชน — กระสุน player กับ enemy
+      bullets.forEach(b => {
+        enemies.forEach(e => {
+          if (e.alive && b.x > e.x && b.x < e.x + e.w && b.y > e.y && b.y < e.y + e.h) {
+            e.alive = false;
+            b.y = -999;
+            score++;
+            scoreEl.textContent = score;
+          }
+        });
+      });
+
+      // ตรวจชน — กระสุน enemy กับ player
+      enemyBullets.forEach(b => {
+        if (b.x > player.x && b.x < player.x + player.w &&
+            b.y > player.y && b.y < player.y + player.h) {
+          b.y = 999;
+          lives--;
+          livesEl.textContent = lives;
+          if (lives <= 0) { endGame(); return; }
+        }
+      });
+
+      // enemy ถึงผู้เล่น
+      enemies.filter(e => e.alive).forEach(e => {
+        if (e.y + e.h >= player.y) { endGame(); }
+      });
+
+      // ชนะ
+      if (enemies.every(e => !e.alive)) {
+        spawnEnemies();
+      }
+
+      draw();
+    }
+
+    function draw() {
+      ctx.fillStyle = '#0f0f0f';
+      ctx.fillRect(0, 0, 480, 500);
+
+      // player
+      ctx.fillStyle = '#00d4ff';
+      ctx.fillRect(player.x, player.y, player.w, player.h);
+
+      // กระสุน player
+      ctx.fillStyle = '#ffff00';
+      bullets.forEach(b => ctx.fillRect(b.x - 2, b.y, 4, 12));
+
+      // กระสุน enemy
+      ctx.fillStyle = '#ff4444';
+      enemyBullets.forEach(b => ctx.fillRect(b.x - 2, b.y, 4, 12));
+
+      // enemy
+      enemies.forEach(e => {
+        if (!e.alive) return;
+        ctx.fillStyle = '#ff6600';
+        ctx.fillRect(e.x, e.y, e.w, e.h);
+        ctx.fillStyle = '#ffaa00';
+        ctx.fillRect(e.x + 5, e.y + 5, 8, 8);
+        ctx.fillRect(e.x + 17, e.y + 5, 8, 8);
+      });
+    }
+
+    function endGame() {
+      clearInterval(gameLoop);
+      running = false;
+      msgEl.textContent = '💀 Game Over! คะแนน: ' + score + ' | กด Enter เพื่อเล่นใหม่';
+    }
+
+    // keyboard
+    document.addEventListener('keydown', e => {
+      keys[e.key] = true;
+      if (e.key === ' ') {
+        e.preventDefault();
+        if (running) bullets.push({ x: player.x + player.w / 2, y: player.y });
+      }
+      if (e.key === 'Enter' && !running) {
+        init();
+        running = true;
+        msgEl.textContent = '← → เคลื่อนที่ | Space ยิง';
+        clearInterval(gameLoop);
+        gameLoop = setInterval(update, 1000 / 60);
+      }
+    });
+
+    document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+    init();
+    draw();
+  </script>
+
+</body>
+</html>
